@@ -1,5 +1,5 @@
 {
   "name": "SomoAI",
   "description": "A friendly STEM tutor for Kenyan high school students using English, Swahili, and Sheng with local analogies.",
-  "requestFramePermissions": ["camera"]
+  "requestFramePermissions": ["camera", "microphone"]
 }

@@ -39,7 +39,11 @@ import {
   Dna,
   Play,
   Pause,
-  RotateCcw
+  RotateCcw,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -499,7 +503,10 @@ function Tutor({ user }: { user: User }) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [image, setImage] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -507,8 +514,69 @@ function Tutor({ user }: { user: User }) {
     }
   }, [messages, isTyping]);
 
+  useEffect(() => {
+    // Initialize Speech Recognition
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = true;
+      
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0])
+          .map((result: any) => result.transcript)
+          .join('');
+        setInput(transcript);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      setInput(''); // Clear input when starting to listen
+      recognitionRef.current?.start();
+      setIsListening(true);
+    }
+  };
+
+  const speakText = (text: string) => {
+    if (!voiceEnabled || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    
+    // Remove markdown characters for better speech
+    const cleanText = text.replace(/[*_#`]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.9; // Slightly slower for clarity
+    window.speechSynthesis.speak(utterance);
+  };
+
   const handleSend = async () => {
     if (!input.trim() && !image) return;
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    }
 
     const userMsg = { role: 'user', content: input, image };
     setMessages(prev => [...prev, userMsg]);
@@ -519,9 +587,12 @@ function Tutor({ user }: { user: User }) {
     try {
       const response = await askSomoAI(input, image?.split(',')[1]);
       setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      speakText(response);
     } catch (error) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Wueh! Mtandao inasumbua kidogo. Try again!" }]);
+      const errorMsg = "Wueh! Mtandao inasumbua kidogo. Try again!";
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
+      speakText(errorMsg);
     } finally {
       setIsTyping(false);
     }
@@ -555,6 +626,21 @@ function Tutor({ user }: { user: User }) {
             <p className="text-xs text-neon-blue font-bold tracking-widest">ONLINE & READY</p>
           </div>
         </div>
+        <button 
+          onClick={() => {
+            setVoiceEnabled(!voiceEnabled);
+            if (voiceEnabled) window.speechSynthesis.cancel();
+          }}
+          className={cn(
+            "p-3 rounded-xl transition-colors border",
+            voiceEnabled 
+              ? "bg-neon-blue/20 text-neon-blue border-neon-blue/50" 
+              : "bg-white/5 text-text-muted border-white/10"
+          )}
+          title={voiceEnabled ? "Mute AI Voice" : "Enable AI Voice"}
+        >
+          {voiceEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+        </button>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-auto p-6 space-y-6 custom-scrollbar">
@@ -563,7 +649,7 @@ function Tutor({ user }: { user: User }) {
             <div className="orb mb-8 scale-75"></div>
             <h4 className="text-2xl font-bold mb-2 text-white">Sasa! Niulize swali yoyote...</h4>
             <p className="text-text-muted max-w-md">
-              Whether it's Biology, Maths, or Physics, I'm here to help. You can even send a photo of your assignment!
+              Whether it's Biology, Maths, or Physics, I'm here to help. You can type, send a photo, or use your voice!
             </p>
           </div>
         )}
@@ -610,12 +696,26 @@ function Tutor({ user }: { user: User }) {
             <Camera size={20} />
             <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
           </label>
+          
+          <button 
+            onClick={toggleListening}
+            className={cn(
+              "p-4 rounded-xl transition-colors border",
+              isListening 
+                ? "bg-red-500/20 text-red-400 border-red-500/50 animate-pulse" 
+                : "bg-white/5 text-text-muted border-white/10 hover:text-neon-blue hover:border-neon-blue/50"
+            )}
+            title="Voice Input"
+          >
+            {isListening ? <MicOff size={20} /> : <Mic size={20} />}
+          </button>
+
           <input 
             type="text" 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Uliza swali... (e.g. Explain Photosynthesis)"
+            placeholder={isListening ? "Listening..." : "Uliza swali... (e.g. Explain Photosynthesis)"}
             className="flex-1 bg-white/5 border border-white/10 focus:border-neon-blue focus:ring-1 focus:ring-neon-blue rounded-xl px-4 py-4 text-white font-medium outline-none transition-all"
           />
           <button 
