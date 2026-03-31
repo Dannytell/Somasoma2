@@ -64,7 +64,8 @@ service cloud.firestore {
     function isValidStudySession(data) {
       return data.keys().hasAll(['userId', 'timestamp']) &&
              data.userId == request.auth.uid &&
-             data.timestamp is timestamp;
+             data.timestamp is timestamp &&
+             (!('durationMinutes' in data) || data.durationMinutes is number);
     }
 
     function isValidMockTest(data) {

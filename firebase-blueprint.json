@@ -10,6 +10,8 @@
         "email": { "type": "string" },
         "subjects": { "type": "array", "items": { "type": "string" } },
         "retentionScore": { "type": "number", "description": "0-100 score of student retention" },
+        "totalStudyHours": { "type": "number", "description": "Total hours studied across all subjects" },
+        "subjectHours": { "type": "object", "description": "Map of subjectId to hours studied" },
         "lastActive": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email"]
@@ -22,6 +24,7 @@
         "userId": { "type": "string" },
         "subject": { "type": "string" },
         "topic": { "type": "string" },
+        "durationMinutes": { "type": "number" },
         "timestamp": { "type": "string", "format": "date-time" },
         "messages": { "type": "array" }
       }
