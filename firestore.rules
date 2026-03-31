@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Auth UID)
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - displayName: string (optional)
+    //   - email: string (required) - User email
+    //   - subjects: list (optional) - Array of strings
+    //   - retentionScore: number (optional) - 0-100
+    //   - lastActive: timestamp (optional)
+    //
+    // Collection: study_sessions
+    // Document ID: sessionId
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - subject: string (optional)
+    //   - topic: string (optional)
+    //   - timestamp: timestamp (required)
+    //   - messages: list (optional) - Array of maps
+    //
+    // Collection: mock_tests
+    // Document ID: testId
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - subject: string (optional)
+    //   - topic: string (optional)
+    //   - score: number (optional)
+    //   - totalQuestions: number (optional)
+    //   - timestamp: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid is string &&
+             data.email is string &&
+             (!('displayName' in data) || data.displayName is string) &&
+             (!('retentionScore' in data) || (data.retentionScore is number && data.retentionScore >= 0 && data.retentionScore <= 100));
+    }
+
+    function isValidStudySession(data) {
+      return data.keys().hasAll(['userId', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidMockTest(data) {
+      return data.keys().hasAll(['userId', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.timestamp is timestamp;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "ondusodancan@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.uid == resource.data.uid;
+    }
+
+    match /study_sessions/{sessionId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidStudySession(request.resource.data);
+      allow update: if isDocOwner() && isValidStudySession(request.resource.data) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /mock_tests/{testId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidMockTest(request.resource.data);
+      allow update: if isDocOwner() && isValidMockTest(request.resource.data) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+  }
+}
